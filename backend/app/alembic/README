@@ -1,0 +1,7 @@
+Alembic migrations for the Parking API.
+
+Run from `backend/`:
+
+```
+alembic upgrade head
+```
