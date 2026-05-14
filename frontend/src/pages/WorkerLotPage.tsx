@@ -15,8 +15,8 @@ import type {
   BookingWithPayments,
   Parking,
   ParkingDetail,
-  Vehicle,
   WorkerSpotBoardItem,
+  WorkerVehicleSearchResult,
 } from "../types";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -49,6 +49,26 @@ function normalizePlateLocal(raw: string) {
   return raw.replace(/[\s-]/g, "").toUpperCase();
 }
 
+/** `false` — картка «Реєстрація бронювання» не показується. */
+const SHOW_WORKER_BOOKING_REGISTRATION = false;
+
+/** `false` — кнопка «Оновити сітку» у шапці сторінки не показується. */
+const SHOW_WORKER_REFRESH_BOARD_BUTTON = false;
+
+function WorkerClientDetails({ c }: { c: WorkerVehicleSearchResult["client"] }) {
+  const phone = c.phone?.trim();
+  return (
+    <div className="mt-1 space-y-0.5 text-xs leading-snug text-zinc-600">
+      <div>
+        <span className="font-medium text-zinc-800">{c.full_name}</span>
+        {phone ? <span className="text-zinc-600"> · {phone}</span> : null}
+      </div>
+      <div className="break-all text-zinc-500">{c.email}</div>
+      <div className="text-zinc-400">клієнт #{c.id}</div>
+    </div>
+  );
+}
+
 export function WorkerLotPage() {
   const [parkings, setParkings] = useState<Parking[]>([]);
   const [parkingId, setParkingId] = useState<number | null>(null);
@@ -59,9 +79,11 @@ export function WorkerLotPage() {
 
   const [modalRow, setModalRow] = useState<WorkerSpotBoardItem | null>(null);
 
-  const [plateQuery, setPlateQuery] = useState("");
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  /** Каталог / пошук — окремо від номера в формі бронювання */
+  const [catalogPlateQuery, setCatalogPlateQuery] = useState("");
+  const [bookingPlateQuery, setBookingPlateQuery] = useState("");
+  const [vehicles, setVehicles] = useState<WorkerVehicleSearchResult[]>([]);
+  const [selectedVehicle, setSelectedVehicle] = useState<WorkerVehicleSearchResult | null>(null);
   const [bookingSpotId, setBookingSpotId] = useState<number | "">("");
   const [bookingTariffId, setBookingTariffId] = useState<number | "">("");
   const range = useMemo(() => defaultDatetimeRange(), []);
@@ -109,8 +131,15 @@ export function WorkerLotPage() {
 
   const overstayRows = board.filter((r) => (r.overstay_minutes ?? 0) > 0);
 
-  function onPlateInputChange(value: string) {
-    setPlateQuery(value);
+  function onCatalogPlateChange(value: string) {
+    setCatalogPlateQuery(value);
+    if (selectedVehicle && normalizePlateLocal(value) !== normalizePlateLocal(selectedVehicle.plate_number)) {
+      setSelectedVehicle(null);
+    }
+  }
+
+  function onBookingPlateChange(value: string) {
+    setBookingPlateQuery(value);
     if (selectedVehicle && normalizePlateLocal(value) !== normalizePlateLocal(selectedVehicle.plate_number)) {
       setSelectedVehicle(null);
     }
@@ -135,7 +164,7 @@ export function WorkerLotPage() {
   async function searchPlate() {
     setPlateSearchMsg(null);
     setBookingMsg(null);
-    const q = plateQuery.trim();
+    const q = catalogPlateQuery.trim();
     if (!q) {
       setVehicles([]);
       setPlateSearchMsg("Введіть номерний знак.");
@@ -145,7 +174,10 @@ export function WorkerLotPage() {
     try {
       const rows = await searchVehiclesByPlate(q);
       setVehicles(rows);
-      if (rows.length === 1) setSelectedVehicle(rows[0]);
+      if (rows.length === 1) {
+        setSelectedVehicle(rows[0]);
+        setBookingPlateQuery(rows[0].plate_number);
+      }
       if (rows.length === 0) {
         setPlateSearchMsg("Нічого не знайдено. Перевірте номер.");
       } else {
@@ -165,7 +197,7 @@ export function WorkerLotPage() {
       setBookingMsg("Оберіть паркінг, вільне місце та тариф.");
       return;
     }
-    const plateNorm = normalizePlateLocal(plateQuery);
+    const plateNorm = normalizePlateLocal(bookingPlateQuery);
     if (!plateNorm) {
       setBookingMsg("Вкажіть номерний знак авто в блоці реєстрації бронювання.");
       return;
@@ -175,7 +207,7 @@ export function WorkerLotPage() {
     if (!vehicle || normalizePlateLocal(vehicle.plate_number) !== plateNorm) {
       setBusy(true);
       try {
-        const rows = await searchVehiclesByPlate(plateQuery.trim());
+        const rows = await searchVehiclesByPlate(bookingPlateQuery.trim());
         setVehicles(rows);
         if (rows.length === 0) {
           setSelectedVehicle(null);
@@ -190,6 +222,7 @@ export function WorkerLotPage() {
         }
         vehicle = rows[0];
         setSelectedVehicle(vehicle);
+        setBookingPlateQuery(vehicle.plate_number);
       } catch {
         setBookingMsg("Не вдалося перевірити номер авто. Спробуйте ще раз.");
         return;
@@ -211,8 +244,8 @@ export function WorkerLotPage() {
     setBusy(true);
     try {
       const created = await workerCreateBooking({
-        user_id: selectedVehicle.user_id,
-        vehicle_id: selectedVehicle.id,
+        user_id: vehicle.user_id,
+        vehicle_id: vehicle.id,
         parking_id: parkingId,
         spot_id: Number(bookingSpotId),
         tariff_id: Number(bookingTariffId),
@@ -309,11 +342,13 @@ export function WorkerLotPage() {
             Місця, шлагбаум, в’їзд/виїзд за номером, бронювання та оплата в одному вікні.
           </div>
         </div>
+        {SHOW_WORKER_REFRESH_BOARD_BUTTON ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={busy || !parkingId} onClick={() => void reloadBoard()}>
             Оновити сітку
           </Button>
         </div>
+        ) : null}
       </div>
 
       <Card>
@@ -441,8 +476,8 @@ export function WorkerLotPage() {
               <div className="mt-1 flex flex-wrap gap-2">
                 <Input
                   className="min-w-[200px] flex-1"
-                  value={plateQuery}
-                  onChange={(e) => onPlateInputChange(e.target.value)}
+                  value={catalogPlateQuery}
+                  onChange={(e) => onCatalogPlateChange(e.target.value)}
                   placeholder="AA1234BC"
                 />
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => void searchPlate()}>
@@ -458,7 +493,8 @@ export function WorkerLotPage() {
                       type="button"
                       onClick={() => {
                         setSelectedVehicle(v);
-                        setPlateQuery(v.plate_number);
+                        setCatalogPlateQuery(v.plate_number);
+                        setBookingPlateQuery(v.plate_number);
                       }}
                       className={`block w-full rounded-xl border px-3 py-2 text-left text-sm ${
                         selectedVehicle?.id === v.id
@@ -467,13 +503,13 @@ export function WorkerLotPage() {
                       }`}
                     >
                       <span className="font-mono font-semibold">{v.plate_number}</span>
-                      <span className="text-zinc-500"> — клієнт #{v.user_id}</span>
                       {(v.brand || v.model) && (
                         <span className="block text-xs text-zinc-600">
                           {[v.brand, v.model].filter(Boolean).join(" ")}
                           {v.color ? ` · ${v.color}` : ""}
                         </span>
                       )}
+                      <WorkerClientDetails c={v.client} />
                     </button>
                   ))}
                 </div>
@@ -482,36 +518,38 @@ export function WorkerLotPage() {
                 <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-sm text-zinc-800">
                   <span className="font-semibold text-indigo-900">Обрано для бронювання:</span>{" "}
                   <span className="font-mono font-bold">{selectedVehicle.plate_number}</span>
-                  <span className="text-zinc-600"> (клієнт #{selectedVehicle.user_id})</span>
+                  <WorkerClientDetails c={selectedVehicle.client} />
                 </div>
               ) : null}
               {plateSearchMsg ? <div className="mt-3 text-sm text-zinc-700">{plateSearchMsg}</div> : null}
             </div>
           </Card>
 
+          {SHOW_WORKER_BOOKING_REGISTRATION ? (
           <Card>
             <div className="text-sm font-semibold text-zinc-900">Реєстрація бронювання</div>
             <p className="mt-1 text-xs text-zinc-500">
-              Обов’язково вкажіть номерний знак. Можна додатково скористатися блоком «Пошук авто за номером». Після
-              створення — «Оплатити на місці» або оплата клієнтом у застосунку.
+              Номер тут незалежний від поля пошуку вище. Після натискання на знайдене авто номер підставиться сюди
+              автоматично. Після створення — «Оплатити на місці» або оплата клієнтом у застосунку.
             </p>
             <div className="mt-4 grid max-w-xl gap-3">
               <label className="text-xs font-semibold text-zinc-500">
                 Номерний знак авто
                 <Input
                   className="mt-1 font-mono"
-                  value={plateQuery}
-                  onChange={(e) => onPlateInputChange(e.target.value)}
+                  value={bookingPlateQuery}
+                  onChange={(e) => onBookingPlateChange(e.target.value)}
                   placeholder="AA1234BC"
                   autoComplete="off"
                 />
               </label>
               {selectedVehicle &&
-              normalizePlateLocal(plateQuery) === normalizePlateLocal(selectedVehicle.plate_number) ? (
+              normalizePlateLocal(bookingPlateQuery) === normalizePlateLocal(selectedVehicle.plate_number) ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-950">
-                  Прив’язано до клієнта #{selectedVehicle.user_id}
+                  <div className="font-semibold text-emerald-900">Прив’язано до клієнта</div>
+                  <WorkerClientDetails c={selectedVehicle.client} />
                   {(selectedVehicle.brand || selectedVehicle.model) && (
-                    <span className="block text-zinc-700">
+                    <span className="mt-1 block text-zinc-700">
                       {[selectedVehicle.brand, selectedVehicle.model].filter(Boolean).join(" ")}
                     </span>
                   )}
@@ -566,8 +604,11 @@ export function WorkerLotPage() {
                 </Button>
               ) : null}
             </div>
+            {/* Повідомлення під формою бронювання (помилки / успіх) — приховано за запитом
             {bookingMsg ? <div className="mt-2 text-sm text-zinc-700">{bookingMsg}</div> : null}
+            */}
           </Card>
+          ) : null}
         </>
       ) : null}
 

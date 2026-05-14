@@ -89,7 +89,14 @@ export function ParkingDetailsPage() {
   const [tariffOpen, setTariffOpen] = useState(false);
   const [price, setPrice] = useState("50");
 
+  const [cityDraft, setCityDraft] = useState("");
+  const [savingCity, setSavingCity] = useState(false);
+
   const title = useMemo(() => parking?.name ?? "Parking", [parking]);
+
+  useEffect(() => {
+    if (parking) setCityDraft(parking.city);
+  }, [parking]);
 
   async function reloadAll() {
     const p = await parkingsApi.getParking(parkingId);
@@ -238,6 +245,44 @@ export function ParkingDetailsPage() {
               </Button>
             ))}
           </div>
+          <div className="mt-8 text-sm font-semibold text-zinc-900">City</div>
+          <p className="mt-2 text-xs text-zinc-600">
+            Місто парковки (фільтр у клієнтському застосунку та списках). Після зміни натисніть «Зберегти місто».
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="min-w-[200px] flex-1">
+              <label className="mb-2 block text-xs font-semibold text-zinc-600">Місто</label>
+              <Input
+                value={cityDraft}
+                onChange={(e) => setCityDraft(e.target.value)}
+                placeholder="Київ"
+                autoComplete="address-level2"
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={
+                savingCity ||
+                !parking ||
+                !cityDraft.trim() ||
+                cityDraft.trim() === parking.city
+              }
+              onClick={async () => {
+                const c = cityDraft.trim();
+                if (!c) return;
+                setSavingCity(true);
+                try {
+                  await parkingsApi.updateParking(parkingId, { city: c });
+                  await reloadAll();
+                } finally {
+                  setSavingCity(false);
+                }
+              }}
+            >
+              Зберегти місто
+            </Button>
+          </div>
+
           <div className="mt-8 text-sm font-semibold text-zinc-900">Map location</div>
           <div className="mt-2 text-xs text-zinc-600">Click the map to move the pin, then save coordinates.</div>
           {parking ? (

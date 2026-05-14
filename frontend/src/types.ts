@@ -78,6 +78,18 @@ export interface Vehicle {
   color: string | null;
 }
 
+/** GET /worker/vehicles/search — vehicle plus owner for worker UI */
+export interface WorkerVehicleClientSummary {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+}
+
+export interface WorkerVehicleSearchResult extends Vehicle {
+  client: WorkerVehicleClientSummary;
+}
+
 export interface WorkerSpotBoardItem {
   spot: ParkingSpot;
   vehicle: Vehicle | null;

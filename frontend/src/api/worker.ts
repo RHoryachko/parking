@@ -4,11 +4,11 @@ import type {
   BookingWithPayments,
   ParkingDetail,
   ParkingSession,
-  Vehicle,
   WorkerEntryRequest,
   WorkerExitRequest,
   WorkerSpotBoardItem,
   Parking,
+  WorkerVehicleSearchResult,
 } from "../types";
 
 export async function listWorkerParkings() {
@@ -27,7 +27,7 @@ export async function getWorkerSpotBoard(parkingId: number) {
 }
 
 export async function searchVehiclesByPlate(plate: string) {
-  const { data } = await api.get<Vehicle[]>("/worker/vehicles/search", { params: { plate } });
+  const { data } = await api.get<WorkerVehicleSearchResult[]>("/worker/vehicles/search", { params: { plate } });
   return data;
 }
 

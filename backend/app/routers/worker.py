@@ -27,7 +27,7 @@ from app.schemas.session import (
     SessionExitRequest,
 )
 from app.schemas.spot import ParkingSpotRead
-from app.schemas.vehicle import VehicleRead
+from app.schemas.vehicle import VehicleRead, VehicleWithClientRead, WorkerVehicleClientSummary
 from app.schemas.worker import BarrierRequest
 from app.schemas.worker_board import WorkerSpotBoardItem
 from app.services import booking_service, session_service, worker_board_service, worker_service
@@ -158,7 +158,7 @@ def list_active_sessions(
     return list(rows)
 
 
-@router.get("/vehicles/search", response_model=list[VehicleRead])
+@router.get("/vehicles/search", response_model=list[VehicleWithClientRead])
 def search_vehicle_by_plate(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(require_role(UserRole.worker))],
@@ -166,8 +166,25 @@ def search_vehicle_by_plate(
 ):
     _ = user
     norm = normalize_plate(plate)
-    rows = db.scalars(select(Vehicle).where(Vehicle.plate_number == norm)).all()
-    return list(rows)
+    stmt = select(Vehicle).where(Vehicle.plate_number == norm).options(joinedload(Vehicle.user))
+    rows = db.scalars(stmt).all()
+    out: list[VehicleWithClientRead] = []
+    for v in rows:
+        u = v.user
+        if u is None:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Vehicle owner missing")
+        out.append(
+            VehicleWithClientRead(
+                id=v.id,
+                user_id=v.user_id,
+                plate_number=v.plate_number,
+                brand=v.brand,
+                model=v.model,
+                color=v.color,
+                client=WorkerVehicleClientSummary.model_validate(u),
+            )
+        )
+    return out
 
 
 @router.get("/bookings/by-plate", response_model=BookingWithPaymentsRead | None)

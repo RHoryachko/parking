@@ -24,3 +24,18 @@ class VehicleRead(BaseModel):
     color: str | None
 
     model_config = {"from_attributes": True}
+
+
+class WorkerVehicleClientSummary(BaseModel):
+    """Owner profile for worker plate search (no secrets)."""
+
+    id: int
+    full_name: str
+    email: str
+    phone: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleWithClientRead(VehicleRead):
+    client: WorkerVehicleClientSummary
