@@ -263,10 +263,10 @@ class _BookingScreenState extends State<BookingScreen> {
                               setState(() => message = 'Payment failed');
                             }
                           },
-                        ),
-                      if (!ApiClient.useMock) ...[
+                        )
+                      else ...[
                         PrimaryButton(
-                          label: 'Pay with LiqPay (browser)',
+                          label: 'Оплатити через LiqPay (браузер)',
                           onPressed: () async {
                             final service = context.read<ClientService>();
                             try {
@@ -276,15 +276,43 @@ class _BookingScreenState extends State<BookingScreen> {
                                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                                 setState(
                                   () => message =
-                                      'Відкрито LiqPay. Після оплати відкриється сторінка «Замовлення оплачене»; також можна оновити «Мої бронювання».',
+                                      'Відкрито LiqPay. Після оплати карткою оновіть «Мої бронювання» — статус зміниться, коли банк підтвердить платіж.',
                                 );
                               } else {
-                                setState(() => message = 'Cannot open payment URL on this device.');
+                                setState(() => message = 'Не вдалося відкрити посилання LiqPay.');
                               }
                             } catch (_) {
-                              setState(() => message = 'LiqPay checkout failed (configure keys on server).');
+                              setState(
+                                () => message =
+                                    'LiqPay недоступний (ключі на сервері). Спробуйте «Миттєва оплата» або оплату на місці.',
+                              );
                             }
                           },
+                        ),
+                        const SizedBox(height: 10),
+                        TextButton(
+                          onPressed: () async {
+                            final service = context.read<ClientService>();
+                            try {
+                              final paid = await service.payBooking(created!.id);
+                              setState(() {
+                                created = paid;
+                                message = 'Оплачено в застосунку. Бронювання #${paid.id}.';
+                              });
+                            } catch (_) {
+                              setState(() => message = 'Миттєва оплата не вдалася.');
+                            }
+                          },
+                          child: const Text('Миттєва оплата (без картки в LiqPay)'),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Якщо на LiqPay зʼявляється «помилка транзакції», часто причина в тому, що сервер API недоступний з інтернету для callback (localhost). Тоді використайте ngrok для APP_PUBLIC_API_URL або миттєву оплату.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.35,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ],

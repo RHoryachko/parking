@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # LiqPay: set in backend/.env (see .env.example).
     LIQPAY_PUBLIC_KEY: str = ""
     LIQPAY_PRIVATE_KEY: str = ""
+    # kie.ai — Gemini 2.5 Flash (OpenAI-compatible) for AI gate plate recognition (see .env.example).
+    KIE_AI_API_KEY: str = ""
+    KIE_AI_CHAT_URL: str = "https://api.kie.ai/gemini-2.5-flash/v1/chat/completions"
+    KIE_AI_MODEL: str = "gemini-2.5-flash"
 
 
 settings = Settings()

@@ -12,3 +12,14 @@ class AiCheckEntryResponse(BaseModel):
     reason: str
     vehicle_id: int | None = None
     booking_id: int | None = None
+
+
+class AiGateSimulationResponse(BaseModel):
+    """AI gate simulation: vision (kie.ai Gemini) + barrier decision (no real hardware)."""
+
+    recognized_plate: str
+    barrier_open: bool
+    reason: str
+    booking_id: int | None = None
+    session_id: int | None = None
+    total_price: str | None = Field(None, description="On exit: billed amount for the completed session")

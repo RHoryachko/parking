@@ -228,17 +228,13 @@ def pay_booking_mock(db: Session, *, user: User, booking_id: int) -> Booking:
             status.HTTP_400_BAD_REQUEST, "Only bookings in 'created' can be paid"
         )
 
-    pending = db.scalar(
-        select(Payment.id).where(
+    for p in db.scalars(
+        select(Payment).where(
             Payment.booking_id == booking.id,
             Payment.status == PaymentStatus.pending,
         )
-    )
-    if pending is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Complete or cancel the LiqPay checkout before using instant pay",
-        )
+    ).all():
+        p.status = PaymentStatus.failed
 
     _assert_no_overlapping_booking_window(
         db,

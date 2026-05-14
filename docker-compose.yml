@@ -34,6 +34,9 @@ services:
       LIQPAY_RESULT_URL: ${LIQPAY_RESULT_URL:-}
       LIQPAY_PUBLIC_KEY: ${LIQPAY_PUBLIC_KEY:-}
       LIQPAY_PRIVATE_KEY: ${LIQPAY_PRIVATE_KEY:-}
+      KIE_AI_API_KEY: ${KIE_AI_API_KEY:-}
+      KIE_AI_CHAT_URL: ${KIE_AI_CHAT_URL:-https://api.kie.ai/gemini-2.5-flash/v1/chat/completions}
+      KIE_AI_MODEL: ${KIE_AI_MODEL:-gemini-2.5-flash}
     depends_on:
       db:
         condition: service_healthy
