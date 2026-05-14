@@ -20,10 +20,27 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     _future = context.read<ClientService>().bookingHistory();
   }
 
+  void _reload() {
+    setState(() {
+      _future = context.read<ClientService>().bookingHistory();
+    });
+  }
+
+  bool _canCancel(String status) => status == 'created' || status == 'paid';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My bookings')),
+      appBar: AppBar(
+        title: const Text('My bookings'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _reload,
+            tooltip: 'Оновити',
+          ),
+        ],
+      ),
       body: FutureBuilder<List<BookingModel>>(
         future: _future,
         builder: (context, snapshot) {
@@ -49,7 +66,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               ),
               const SizedBox(height: 8),
               ...items.map((b) {
-                final statusColor = b.status == 'paid' ? const Color(0xFF16A34A) : const Color(0xFF6B7280);
+                final statusColor = b.status == 'paid'
+                    ? const Color(0xFF16A34A)
+                    : b.status == 'canceled'
+                        ? const Color(0xFF9CA3AF)
+                        : const Color(0xFF6B7280);
                 return Card(
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -71,13 +92,52 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(b.status, style: TextStyle(color: statusColor, fontWeight: FontWeight.w700)),
-                            )
+                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
                         Text('Parking ${b.parkingId} • Spot ${b.spotId} • Vehicle ${b.vehicleId}'),
                         const SizedBox(height: 6),
-                        Text('${b.plannedStartTime} -> ${b.plannedEndTime}', style: const TextStyle(color: Color(0xFF6B7280))),
+                        Text('${b.plannedStartTime} -> ${b.plannedEndTime}',
+                            style: const TextStyle(color: Color(0xFF6B7280))),
+                        if (_canCancel(b.status)) ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Скасувати бронь?'),
+                                    content: Text('Бронювання #${b.id} буде скасовано.'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ні')),
+                                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Так')),
+                                    ],
+                                  ),
+                                );
+                                if (ok != true || !context.mounted) return;
+                                try {
+                                  await context.read<ClientService>().cancelBooking(b.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Бронювання скасовано')),
+                                    );
+                                    _reload();
+                                  }
+                                } catch (_) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Не вдалося скасувати')),
+                                    );
+                                  }
+                                }
+                              },
+                              child: const Text('Скасувати бронь'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -90,4 +150,3 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     );
   }
 }
-

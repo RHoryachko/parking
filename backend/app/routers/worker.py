@@ -8,6 +8,7 @@ from app.core.deps import get_db, require_role
 from app.models.barrier_log import BarrierLog
 from app.models.booking import Booking
 from app.models.enums import SessionStatus, UserRole
+from app.models.parking import Parking
 from app.models.parking_session import ParkingSession
 from app.models.parking_spot import ParkingSpot
 from app.models.user import User
@@ -19,6 +20,7 @@ from app.schemas.session import (
     SessionEntryRequest,
     SessionExitRequest,
 )
+from app.schemas.parking import ParkingRead
 from app.schemas.spot import ParkingSpotRead
 from app.schemas.vehicle import VehicleRead
 from app.schemas.worker import BarrierRequest
@@ -26,6 +28,18 @@ from app.services import booking_service, session_service, worker_service
 from app.services.util import normalize_plate
 
 router = APIRouter(dependencies=[Depends(require_role(UserRole.worker))])
+
+
+@router.get("/parkings", response_model=list[ParkingRead])
+def list_worker_parkings(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    assigned = worker_service.worker_parking_ids(db, user.id)
+    if not assigned:
+        return []
+    rows = db.scalars(select(Parking).where(Parking.id.in_(assigned)).order_by(Parking.name)).all()
+    return list(rows)
 
 
 @router.get("/spots", response_model=list[ParkingSpotRead])

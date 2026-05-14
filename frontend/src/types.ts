@@ -8,6 +8,8 @@ export interface User {
   role: UserRole;
   is_blocked: boolean;
   created_at: string;
+  /** Present on GET /admin/workers */
+  assigned_parking_ids?: number[];
 }
 
 export type WorkMode = "manual" | "ai";

@@ -5,6 +5,7 @@ import 'models/user_model.dart';
 import 'screens/booking_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/my_bookings_screen.dart';
+import 'screens/payment_success_screen.dart';
 import 'screens/parking_details_screen.dart';
 import 'screens/parking_list_screen.dart';
 import 'screens/register_screen.dart';
@@ -48,7 +49,9 @@ class AuthController extends ChangeNotifier {
 }
 
 class ParkingClientApp extends StatelessWidget {
-  const ParkingClientApp({super.key});
+  final String initialRoute;
+
+  const ParkingClientApp({super.key, this.initialRoute = '/'});
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +123,14 @@ class ParkingClientApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'Parking Client',
         theme: theme,
-        initialRoute: '/',
+        initialRoute: initialRoute,
         routes: {
           '/': (_) => const AuthGate(),
           '/login': (_) => const LoginScreen(),
           '/register': (_) => const RegisterScreen(),
           '/parkings': (_) => const ParkingListScreen(),
           '/my-bookings': (_) => const MyBookingsScreen(),
+          '/payment-success': (_) => const PaymentSuccessScreen(),
         },
         onGenerateRoute: (settings) {
           if (settings.name == '/parking-details') {

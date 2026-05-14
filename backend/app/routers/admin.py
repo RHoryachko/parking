@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +14,7 @@ from app.models.parking_spot import ParkingSpot
 from app.models.tariff import Tariff
 from app.models.user import User
 from app.models.worker_assignment import WorkerAssignment
+from app.schemas.booking import BookingRead
 from app.schemas.logs import AiLogRead, BarrierLogRead
 from app.schemas.parking import (
     ParkingCreate,
@@ -25,10 +26,10 @@ from app.schemas.parking import (
 from app.schemas.spot import ParkingSpotCreate, ParkingSpotRead, ParkingSpotUpdate
 from app.schemas.stats import AdminStatsRead
 from app.schemas.tariff import TariffCreate, TariffRead, TariffUpdate
-from app.schemas.user import UserRead, WorkerBlockUpdate, WorkerCreate, WorkerUpdate
+from app.schemas.user import UserRead, WorkerBlockUpdate, WorkerCreate, WorkerRead, WorkerUpdate
 from app.schemas.worker import WorkerAssignRequest
 from app.core.security import hash_password
-from app.services import stats_service
+from app.services import booking_service, stats_service
 
 router = APIRouter(dependencies=[Depends(require_role(UserRole.admin))])
 
@@ -107,6 +108,18 @@ def delete_parking(parking_id: int, db: Annotated[Session, Depends(get_db)]):
     db.delete(p)
     db.commit()
     return None
+
+
+@router.post("/bookings/{booking_id}/cancel", response_model=BookingRead)
+def admin_cancel_booking(
+    booking_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    admin_user: Annotated[User, Depends(require_role(UserRole.admin))],
+):
+    b = booking_service.cancel_booking(db, user=admin_user, booking_id=booking_id, is_admin=True)
+    db.commit()
+    db.refresh(b)
+    return b
 
 
 @router.patch("/parkings/{parking_id}/work-mode", response_model=ParkingRead)
@@ -255,10 +268,17 @@ def delete_tariff(parking_id: int, tariff_id: int, db: Annotated[Session, Depend
 # --- Workers ---
 
 
-@router.get("/workers", response_model=list[UserRead])
+@router.get("/workers", response_model=list[WorkerRead])
 def list_workers(db: Annotated[Session, Depends(get_db)]):
     rows = db.scalars(select(User).where(User.role == UserRole.worker).order_by(User.email)).all()
-    return list(rows)
+    out: list[WorkerRead] = []
+    for u in rows:
+        ids = db.scalars(
+            select(WorkerAssignment.parking_id).where(WorkerAssignment.worker_id == u.id)
+        ).all()
+        base = UserRead.model_validate(u)
+        out.append(WorkerRead(**base.model_dump(), assigned_parking_ids=list(ids)))
+    return out
 
 
 @router.post("/workers", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -321,13 +341,10 @@ def assign_worker(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Worker not found")
     if not db.get(Parking, payload.parking_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Parking not found")
-    wa = WorkerAssignment(worker_id=worker_id, parking_id=payload.parking_id)
-    db.add(wa)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Assignment already exists")
+    # One parking per worker: replace previous assignments
+    db.execute(delete(WorkerAssignment).where(WorkerAssignment.worker_id == worker_id))
+    db.add(WorkerAssignment(worker_id=worker_id, parking_id=payload.parking_id))
+    db.commit()
     return {"ok": True}
 
 

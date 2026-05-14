@@ -45,7 +45,7 @@ export function Sidebar() {
         )}
       </nav>
       <div className="mt-auto rounded-2xl border border-black/5 bg-gradient-to-br from-indigo-500/10 to-sky-500/10 p-4 text-xs text-zinc-700">
-        Tip: keep the API running on <span className="font-mono">:8000</span> and use the Vite proxy for{" "}
+        Tip: keep the API running on <span className="font-mono">:8010</span> and use the Vite proxy for{" "}
         <span className="font-mono">/api</span>.
       </div>
     </aside>

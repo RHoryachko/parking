@@ -36,10 +36,54 @@ class _BookingScreenState extends State<BookingScreen> {
   String? message;
   BookingModel? created;
 
+  late DateTime plannedStart;
+  late DateTime plannedEnd;
+
   @override
   void initState() {
     super.initState();
     _init();
+  }
+
+  DateTime _defaultStartLocal() {
+    final n = DateTime.now();
+    var s = DateTime(n.year, n.month, n.day, n.hour + 1, 0);
+    if (!s.isAfter(n.add(const Duration(minutes: 10)))) {
+      s = s.add(const Duration(hours: 1));
+    }
+    return s;
+  }
+
+  String _formatLocal(DateTime dt) {
+    final d = dt;
+    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year} '
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  String? _timeRangeError() {
+    if (!plannedEnd.isAfter(plannedStart)) {
+      return 'Кінець має бути пізніше за початок';
+    }
+    if (plannedStart.isBefore(DateTime.now().subtract(const Duration(minutes: 1)))) {
+      return 'Початок не може бути в минулому';
+    }
+    return null;
+  }
+
+  Future<DateTime?> _pickDateTime(BuildContext context, DateTime initial) async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: DateTime(initial.year, initial.month, initial.day),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (d == null || !context.mounted) return null;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+    );
+    if (t == null || !context.mounted) return null;
+    return DateTime(d.year, d.month, d.day, t.hour, t.minute);
   }
 
   Future<void> _init() async {
@@ -52,6 +96,8 @@ class _BookingScreenState extends State<BookingScreen> {
     if (tariffs != null && tariffs.isNotEmpty) {
       selectedTariff = tariffs.first;
     }
+    plannedStart = _defaultStartLocal();
+    plannedEnd = plannedStart.add(const Duration(hours: 2));
     setState(() => loading = false);
   }
 
@@ -66,31 +112,12 @@ class _BookingScreenState extends State<BookingScreen> {
       );
     }
 
-    final mock = ApiClient.useMock;
-    final hint = mock
-        ? 'Create a booking, then pay instantly (mock).'
-        : 'Create a booking, then pay with the test endpoint or open LiqPay checkout (configure keys on the server).';
-
     return Scaffold(
       appBar: AppBar(title: const Text('Create booking')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFDBEAFE), Color(0xFFEDE9FE)],
-                ),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Text(
-                hint,
-                style: TextStyle(color: Colors.indigo.shade900, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -135,18 +162,74 @@ class _BookingScreenState extends State<BookingScreen> {
                         decoration: const InputDecoration(labelText: 'Tariff'),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Час броню',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF475569)),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: created != null
+                            ? null
+                            : () async {
+                                final v = await _pickDateTime(context, plannedStart);
+                                if (v != null) setState(() => plannedStart = v);
+                              },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Початок',
+                            suffixIcon: Icon(Icons.calendar_today_outlined, size: 20),
+                          ),
+                          child: Text(_formatLocal(plannedStart), style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: created != null
+                            ? null
+                            : () async {
+                                final v = await _pickDateTime(context, plannedEnd);
+                                if (v != null) setState(() => plannedEnd = v);
+                              },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Кінець',
+                            suffixIcon: Icon(Icons.schedule_outlined, size: 20),
+                          ),
+                          child: Text(_formatLocal(plannedEnd), style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ),
+                    if (_timeRangeError() != null && created == null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _timeRangeError()!,
+                        style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     PrimaryButton(
                       label: 'Create booking',
                       onPressed: created != null ||
                               selectedVehicle == null ||
                               selectedSpot == null ||
-                              selectedTariff == null
+                              selectedTariff == null ||
+                              _timeRangeError() != null
                           ? null
                           : () async {
                               final service = context.read<ClientService>();
-                              final start = DateTime.now().toUtc().add(const Duration(minutes: 5));
-                              final end = start.add(const Duration(hours: 2));
+                              final start = plannedStart;
+                              final end = plannedEnd;
                               try {
                                 final booking = await service.createBooking(
                                   parkingId: widget.args.parkingId,
@@ -167,23 +250,23 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                     if (created != null && created!.status == 'created') ...[
                       const SizedBox(height: 16),
-                      PrimaryButton(
-                        label: mock ? 'Pay (mock)' : 'Instant pay (test API)',
-                        onPressed: () async {
-                          final service = context.read<ClientService>();
-                          try {
-                            final paid = await service.payBooking(created!.id);
-                            setState(() {
-                              created = paid;
-                              message = 'Paid: booking #${paid.id}';
-                            });
-                          } catch (_) {
-                            setState(() => message = 'Payment failed');
-                          }
-                        },
-                      ),
-                      if (!mock) ...[
-                        const SizedBox(height: 10),
+                      if (ApiClient.useMock)
+                        PrimaryButton(
+                          label: 'Pay (mock)',
+                          onPressed: () async {
+                            final service = context.read<ClientService>();
+                            try {
+                              final paid = await service.payBooking(created!.id);
+                              setState(() {
+                                created = paid;
+                                message = 'Paid: booking #${paid.id}';
+                              });
+                            } catch (_) {
+                              setState(() => message = 'Payment failed');
+                            }
+                          },
+                        ),
+                      if (!ApiClient.useMock) ...[
                         PrimaryButton(
                           label: 'Pay with LiqPay (browser)',
                           onPressed: () async {
@@ -195,7 +278,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                                 setState(
                                   () => message =
-                                      'Opened LiqPay. After payment completes, refresh “My bookings”.',
+                                      'Відкрито LiqPay. Після оплати відкриється сторінка «Замовлення оплачене»; також можна оновити «Мої бронювання».',
                                 );
                               } else {
                                 setState(() => message = 'Cannot open payment URL on this device.');

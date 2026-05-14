@@ -18,6 +18,17 @@ def _billing_hours(entry: datetime, exit_at: datetime) -> int:
     return max(1, math.ceil(secs / 3600))
 
 
+def user_has_active_parking_session(db: Session, user_id: int) -> bool:
+    """True if this user already has an open (active) parking session on any booking."""
+    stmt = (
+        select(ParkingSession.id)
+        .join(Booking, Booking.id == ParkingSession.booking_id)
+        .where(Booking.user_id == user_id, ParkingSession.status == SessionStatus.active)
+        .limit(1)
+    )
+    return db.scalar(stmt) is not None
+
+
 def find_paid_booking_for_entry(
     db: Session, *, parking_id: int, plate: str
 ) -> Booking | None:
@@ -57,6 +68,11 @@ def register_entry(db: Session, *, parking_id: int, plate_number: str) -> Parkin
         )
     if booking.session:
         raise HTTPException(status.HTTP_409_CONFLICT, "Session already exists for this booking")
+    if user_has_active_parking_session(db, booking.user_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This user already has an active parking session. Complete exit before a new entry.",
+        )
 
     now = datetime.now(timezone.utc)
     parking_session = ParkingSession(

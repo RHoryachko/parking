@@ -30,48 +30,56 @@ export function WorkersPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-zinc-600">Create workers, assign them to a parking, and block access.</div>
+        <div className="text-sm text-zinc-600">
+          Create workers, assign each to exactly one parking (new assignment replaces the previous), and block access.
+        </div>
         <Button type="button" onClick={() => setOpen(true)}>
           New worker
         </Button>
       </div>
 
       <Table
-        headers={["Name", "Email", "Status", ""]}
-        rows={workers.map((w) => [
-          w.full_name,
-          w.email,
-          <Badge key="b" tone={w.is_blocked ? "danger" : "success"}>
-            {w.is_blocked ? "blocked" : "active"}
-          </Badge>,
-          <div key="a" className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" className="!px-3 !py-1 text-xs" onClick={() => setAssignOpen(w)}>
-              Assign
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="!px-3 !py-1 text-xs"
-              onClick={async () => {
-                await workersApi.blockWorker(w.id, !w.is_blocked);
-                await reload();
-              }}
-            >
-              Toggle block
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              className="!px-3 !py-1 text-xs"
-              onClick={async () => {
-                await workersApi.deleteWorker(w.id);
-                await reload();
-              }}
-            >
-              Delete
-            </Button>
-          </div>,
-        ])}
+        headers={["Name", "Email", "Parking(s)", "Status", ""]}
+        rows={workers.map((w) => {
+          const assignedNames = (w.assigned_parking_ids ?? [])
+            .map((id) => parkings.find((p) => p.id === id)?.name ?? `#${id}`)
+            .join(", ");
+          return [
+            w.full_name,
+            w.email,
+            assignedNames || "—",
+            <Badge key="b" tone={w.is_blocked ? "danger" : "success"}>
+              {w.is_blocked ? "blocked" : "active"}
+            </Badge>,
+            <div key="a" className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" className="!px-3 !py-1 text-xs" onClick={() => setAssignOpen(w)}>
+                Assign
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="!px-3 !py-1 text-xs"
+                onClick={async () => {
+                  await workersApi.blockWorker(w.id, !w.is_blocked);
+                  await reload();
+                }}
+              >
+                Toggle block
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                className="!px-3 !py-1 text-xs"
+                onClick={async () => {
+                  await workersApi.deleteWorker(w.id);
+                  await reload();
+                }}
+              >
+                Delete
+              </Button>
+            </div>,
+          ];
+        })}
       />
 
       <Modal open={open} title="Create worker" onClose={() => setOpen(false)}>
@@ -108,7 +116,7 @@ export function WorkersPage() {
         </form>
       </Modal>
 
-      <Modal open={!!assignOpen} title="Assign worker to parking" onClose={() => setAssignOpen(null)}>
+      <Modal open={!!assignOpen} title="Assign worker to one parking" onClose={() => setAssignOpen(null)}>
         <form
           className="space-y-3"
           onSubmit={async (e) => {

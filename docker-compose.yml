@@ -1,3 +1,4 @@
+# PostgreSQL + API. For local SQLite without Docker use: .\run_local.ps1
 services:
   db:
     image: postgres:16-alpine
@@ -26,7 +27,13 @@ services:
       JWT_SECRET: dev-change-me-in-production
       JWT_ALG: HS256
       JWT_EXPIRES_MIN: "60"
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:8080,http://localhost:8080
+      APP_PUBLIC_API_URL: ${APP_PUBLIC_API_URL:-http://127.0.0.1:8000}
+      CLIENT_APP_WEB_URL: ${CLIENT_APP_WEB_URL:-http://127.0.0.1:8080}
+      # Empty → LiqPay result CLIENT_APP_WEB_URL/payment-success?booking_id=…
+      LIQPAY_RESULT_URL: ${LIQPAY_RESULT_URL:-}
+      LIQPAY_PUBLIC_KEY: ${LIQPAY_PUBLIC_KEY:-}
+      LIQPAY_PRIVATE_KEY: ${LIQPAY_PRIVATE_KEY:-}
     depends_on:
       db:
         condition: service_healthy

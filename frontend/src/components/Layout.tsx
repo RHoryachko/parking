@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
 function titleForPath(pathname: string) {
+  if (pathname.includes("/worker/dashboard")) return "Worker dashboard";
   if (pathname.endsWith("/dashboard")) return "Dashboard";
   if (pathname.endsWith("/parkings/map")) return "Parkings map";
   if (/\/parkings\/\d+/.test(pathname)) return "Parking details";

@@ -1,5 +1,10 @@
 import { api } from "./client";
-import type { ParkingSession, WorkerEntryRequest, WorkerExitRequest } from "../types";
+import type { Parking, ParkingSession, WorkerEntryRequest, WorkerExitRequest } from "../types";
+
+export async function listWorkerParkings() {
+  const { data } = await api.get<Parking[]>("/worker/parkings");
+  return data;
+}
 
 export async function listActiveSessions(parking_id?: number) {
   const { data } = await api.get<ParkingSession[]>("/worker/sessions/active", {

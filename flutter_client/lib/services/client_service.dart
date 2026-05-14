@@ -208,6 +208,29 @@ class ClientService {
     return data['checkout_url'] as String;
   }
 
+  Future<BookingModel> cancelBooking(int bookingId) async {
+    if (ApiClient.useMock) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      final idx = _mockBookings.indexWhere((b) => b.id == bookingId);
+      if (idx == -1) throw Exception('Booking not found');
+      final b = _mockBookings[idx];
+      final updated = BookingModel(
+        id: b.id,
+        parkingId: b.parkingId,
+        spotId: b.spotId,
+        vehicleId: b.vehicleId,
+        tariffId: b.tariffId,
+        plannedStartTime: b.plannedStartTime,
+        plannedEndTime: b.plannedEndTime,
+        status: 'canceled',
+      );
+      _mockBookings[idx] = updated;
+      return updated;
+    }
+    final response = await _apiClient.dio.post('/client/bookings/$bookingId/cancel');
+    return BookingModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<BookingModel>> bookingHistory() async {
     if (ApiClient.useMock) {
       await Future<void>.delayed(const Duration(milliseconds: 120));
