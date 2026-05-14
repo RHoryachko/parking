@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:8080,http://localhost:8080"
     # Public base URL of this API (no trailing slash). LiqPay server_url must reach this host.
     APP_PUBLIC_API_URL: str = "http://127.0.0.1:8010"
-    # Flutter web origin (same host as `flutter run --web-port`, default 8080). LiqPay result_url → …/payment-success
+    # Flutter web origin (same host as `flutter run --web-port`, default 8080). LiqPay result_url → …/payment-success?booking_id=
     CLIENT_APP_WEB_URL: str = "http://127.0.0.1:8080"
-    # Override LiqPay return URL (optional). Empty = CLIENT_APP_WEB_URL + /payment-success
+    # Override LiqPay return URL (optional). Empty = CLIENT_APP_WEB_URL + /payment-success?booking_id=…
     LIQPAY_RESULT_URL: str = ""
     # LiqPay: set in backend/.env (see .env.example).
     LIQPAY_PUBLIC_KEY: str = ""

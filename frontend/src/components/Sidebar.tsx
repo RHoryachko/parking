@@ -9,7 +9,6 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export function Sidebar() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const base = isAdmin ? "/admin" : "/worker";
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col gap-2 border-r border-black/5 bg-white/50 p-4 backdrop-blur-xl md:flex">
@@ -20,11 +19,11 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex flex-col gap-1">
-        <NavLink to={`${base}/dashboard`} end className={linkClass}>
-          Dashboard
-        </NavLink>
         {isAdmin ? (
           <>
+            <NavLink to="/admin/dashboard" end className={linkClass}>
+              Dashboard
+            </NavLink>
             <NavLink to="/admin/parkings" className={linkClass}>
               Parkings
             </NavLink>
@@ -39,8 +38,8 @@ export function Sidebar() {
             </NavLink>
           </>
         ) : (
-          <NavLink to="/worker/sessions" className={linkClass}>
-            Sessions
+          <NavLink to="/worker/lot" className={linkClass}>
+            Майданчик
           </NavLink>
         )}
       </nav>

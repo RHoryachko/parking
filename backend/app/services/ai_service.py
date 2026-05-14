@@ -22,7 +22,12 @@ def check_entry(
 
     norm = normalize_plate(recognized_plate)
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == norm))
-    booking = find_paid_booking_for_entry(db, parking_id=parking_id, plate=recognized_plate)
+    booking = find_paid_booking_for_entry(
+        db,
+        parking_id=parking_id,
+        plate=recognized_plate,
+        require_inside_planned_window=True,
+    )
 
     if vehicle is None:
         allowed, reason = False, "vehicle_not_found"
@@ -43,7 +48,12 @@ def check_entry(
     booking_id: int | None = None
     vid = vehicle.id if vehicle else None
     if allowed:
-        register_entry(db, parking_id=parking_id, plate_number=recognized_plate)
+        register_entry(
+            db,
+            parking_id=parking_id,
+            plate_number=recognized_plate,
+            require_inside_planned_window=True,
+        )
         booking_id = booking.id
 
     db.flush()

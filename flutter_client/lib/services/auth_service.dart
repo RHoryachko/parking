@@ -57,6 +57,9 @@ class AuthService {
         fullName: 'Mock Client',
         email: 'mock.client@parking.local',
         role: 'client',
+        phone: '+380501112233',
+        isBlocked: false,
+        createdAt: DateTime.utc(2025, 1, 15),
       );
     }
     final response = await _apiClient.dio.get('/auth/me');

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
-/// Shown after LiqPay redirects to `/payment-success?booking_id=…` (Flutter web).
+/// Thanks page after LiqPay (`/payment-success?booking_id=…`). Default `result_url` from the API uses this route.
 class PaymentSuccessScreen extends StatelessWidget {
   const PaymentSuccessScreen({super.key});
 

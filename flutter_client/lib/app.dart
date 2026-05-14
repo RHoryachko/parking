@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'models/user_model.dart';
+import 'models/vehicle_model.dart';
 import 'screens/booking_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/my_bookings_screen.dart';
 import 'screens/payment_success_screen.dart';
 import 'screens/parking_details_screen.dart';
 import 'screens/parking_list_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/vehicle_form_screen.dart';
+import 'screens/vehicles_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/client_service.dart';
@@ -44,6 +48,16 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     await authService.logout();
     user = null;
+    notifyListeners();
+  }
+
+  void replaceUser(UserModel u) {
+    user = u;
+    notifyListeners();
+  }
+
+  Future<void> refreshUser() async {
+    user = await authService.me();
     notifyListeners();
   }
 }
@@ -131,6 +145,8 @@ class ParkingClientApp extends StatelessWidget {
           '/parkings': (_) => const ParkingListScreen(),
           '/my-bookings': (_) => const MyBookingsScreen(),
           '/payment-success': (_) => const PaymentSuccessScreen(),
+          '/profile': (_) => const ProfileScreen(),
+          '/vehicles': (_) => const VehiclesScreen(),
         },
         onGenerateRoute: (settings) {
           if (settings.name == '/parking-details') {
@@ -140,6 +156,10 @@ class ParkingClientApp extends StatelessWidget {
           if (settings.name == '/booking') {
             final args = settings.arguments as BookingScreenArgs;
             return MaterialPageRoute(builder: (_) => BookingScreen(args: args));
+          }
+          if (settings.name == '/vehicle-form') {
+            final vehicle = settings.arguments as VehicleModel?;
+            return MaterialPageRoute(builder: (_) => VehicleFormScreen(vehicle: vehicle));
           }
           return null;
         },

@@ -49,11 +49,12 @@ def _assert_no_overlapping_booking_window(
 
 
 def liqpay_result_url(cfg: Settings, booking_id: int) -> str:
-    """LiqPay result_url: LIQPAY_RESULT_URL, else Flutter /payment-success, else API HTML /payment/success."""
+    """LiqPay result_url: LIQPAY_RESULT_URL, else Flutter /payment-success?booking_id=…, else API /payment/success."""
     base = (cfg.LIQPAY_RESULT_URL or "").strip()
     if not base:
         client = (cfg.CLIENT_APP_WEB_URL or "").strip()
         if client:
+            # Dedicated route (see flutter main.dart); avoids edge cases with query-only on `/`.
             base = f"{client.rstrip('/')}/payment-success"
         else:
             base = f"{cfg.APP_PUBLIC_API_URL.rstrip('/')}/payment/success"
@@ -114,6 +115,62 @@ def create_booking(
         status=BookingStatus.created,
     )
     # Reserve spot when booking is created
+    spot.status = SpotStatus.reserved
+    db.add(booking)
+    db.flush()
+    return booking
+
+
+def create_booking_for_client(
+    db: Session,
+    *,
+    client_user_id: int,
+    vehicle_id: int,
+    parking_id: int,
+    spot_id: int,
+    tariff_id: int,
+    planned_start_time: datetime,
+    planned_end_time: datetime,
+) -> Booking:
+    """Same rules as client self-service booking, but the worker picks the client account."""
+    owner = db.get(User, client_user_id)
+    if not owner or owner.role != UserRole.client:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id must be a client account")
+
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.user_id != owner.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vehicle not found")
+
+    spot = db.get(ParkingSpot, spot_id)
+    if not spot or spot.parking_id != parking_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Spot does not belong to parking")
+    if spot.status != SpotStatus.free:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Spot is not free")
+
+    tariff = db.get(Tariff, tariff_id)
+    if not tariff or tariff.parking_id != parking_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tariff does not belong to parking")
+
+    if planned_end_time <= planned_start_time:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "planned_end_time must be after planned_start_time")
+
+    _assert_no_overlapping_booking_window(
+        db,
+        user_id=owner.id,
+        planned_start_time=planned_start_time,
+        planned_end_time=planned_end_time,
+    )
+
+    booking = Booking(
+        user_id=owner.id,
+        vehicle_id=vehicle_id,
+        parking_id=parking_id,
+        spot_id=spot_id,
+        tariff_id=tariff_id,
+        planned_start_time=planned_start_time,
+        planned_end_time=planned_end_time,
+        status=BookingStatus.created,
+    )
     spot.status = SpotStatus.reserved
     db.add(booking)
     db.flush()
@@ -210,6 +267,55 @@ def pay_booking_mock(db: Session, *, user: User, booking_id: int) -> Booking:
     return booking
 
 
+def pay_booking_worker_mock(db: Session, *, worker_id: int, booking_id: int) -> Booking:
+    """Cashier / terminal: mark a client's unpaid booking as paid (same as mock client pay)."""
+    from app.services import worker_service
+
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
+    worker_service.ensure_worker_parking(db, worker_id, booking.parking_id)
+    if booking.status != BookingStatus.created:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only bookings in 'created' can be paid",
+        )
+
+    # Cashier confirms payment in person: supersede any unfinished LiqPay checkout row (no gateway check).
+    for p in db.scalars(
+        select(Payment).where(
+            Payment.booking_id == booking.id,
+            Payment.status == PaymentStatus.pending,
+        )
+    ).all():
+        p.status = PaymentStatus.failed
+
+    _assert_no_overlapping_booking_window(
+        db,
+        user_id=booking.user_id,
+        planned_start_time=booking.planned_start_time,
+        planned_end_time=booking.planned_end_time,
+        exclude_booking_id=booking.id,
+    )
+
+    hours = _planned_billable_hours(booking)
+    amount = (booking.tariff.price_per_hour * hours).quantize(Decimal("0.01"))
+    now = datetime.now(timezone.utc)
+
+    payment = Payment(
+        booking_id=booking.id,
+        session_id=None,
+        user_id=booking.user_id,
+        amount=amount,
+        status=PaymentStatus.paid,
+        paid_at=now,
+    )
+    db.add(payment)
+    booking.status = BookingStatus.paid
+    db.flush()
+    return booking
+
+
 def start_liqpay_checkout(db: Session, *, user: User, booking_id: int) -> tuple[str, int]:
     """Creates a pending payment and returns (checkout_url, payment_id). Requires LiqPay keys."""
     cfg = Settings()
@@ -260,6 +366,15 @@ def start_liqpay_checkout(db: Session, *, user: User, booking_id: int) -> tuple[
     server_url = f"{cfg.APP_PUBLIC_API_URL.rstrip('/')}/api/payments/liqpay/callback"
     description = f"Parking booking #{booking.id}"
 
+    host = urlsplit(server_url).hostname or ""
+    if host in ("127.0.0.1", "localhost"):
+        logger.warning(
+            "LiqPay server_url uses %s — LiqPay cannot call your API from the internet. "
+            "Use ngrok/cloudflared (or deploy) and set APP_PUBLIC_API_URL to the public HTTPS URL, "
+            "otherwise the card step often ends with a generic transaction error.",
+            host,
+        )
+
     try:
         url = request_checkout_redirect_url(
             public_key=pub,
@@ -307,6 +422,9 @@ def apply_liqpay_callback(*, db: Session, data_b64: str, signature: str) -> dict
 
     if payment.status == PaymentStatus.paid:
         return {"status": "ok", "detail": "already_paid"}
+    if payment.status == PaymentStatus.failed:
+        # e.g. abandoned LiqPay attempt after cashier pay, or gateway failure — do not resurrect this row
+        return {"status": "ok", "detail": "payment_inactive"}
 
     liq_status = str(payload.get("status", ""))
     if liq_status != "success":

@@ -1,3 +1,4 @@
+import '../models/user_model.dart';
 import '../models/booking_model.dart';
 import '../models/parking_model.dart';
 import '../models/spot_model.dart';
@@ -96,6 +97,35 @@ class ClientService {
         .toList();
   }
 
+  Future<UserModel> updateProfile({
+    required UserModel current,
+    required String fullName,
+    required String phoneRaw,
+  }) async {
+    if (ApiClient.useMock) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      final t = phoneRaw.trim();
+      return UserModel(
+        id: current.id,
+        fullName: fullName.trim(),
+        email: current.email,
+        role: current.role,
+        phone: t.isEmpty ? null : t,
+        isBlocked: current.isBlocked,
+        createdAt: current.createdAt,
+      );
+    }
+    final t = phoneRaw.trim();
+    final response = await _apiClient.dio.patch(
+      '/client/me',
+      data: {
+        'full_name': fullName.trim(),
+        'phone': t.isEmpty ? '' : t,
+      },
+    );
+    return UserModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<VehicleModel>> listVehicles() async {
     if (ApiClient.useMock) {
       await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -134,6 +164,48 @@ class ClientService {
       },
     );
     return VehicleModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<VehicleModel> updateVehicle(
+    int vehicleId, {
+    required String plateNumber,
+    String? brand,
+    String? model,
+    String? color,
+  }) async {
+    if (ApiClient.useMock) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final idx = _mockVehicles.indexWhere((v) => v.id == vehicleId);
+      if (idx == -1) throw Exception('Vehicle not found');
+      final updated = VehicleModel(
+        id: vehicleId,
+        plateNumber: plateNumber.toUpperCase(),
+        brand: brand,
+        model: model,
+        color: color,
+      );
+      _mockVehicles[idx] = updated;
+      return updated;
+    }
+    final response = await _apiClient.dio.patch(
+      '/client/vehicles/$vehicleId',
+      data: {
+        'plate_number': plateNumber,
+        'brand': brand,
+        'model': model,
+        'color': color,
+      },
+    );
+    return VehicleModel.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteVehicle(int vehicleId) async {
+    if (ApiClient.useMock) {
+      _mockVehicles.removeWhere((v) => v.id == vehicleId);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      return;
+    }
+    await _apiClient.dio.delete('/client/vehicles/$vehicleId');
   }
 
   Future<BookingModel> createBooking({

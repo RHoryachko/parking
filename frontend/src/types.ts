@@ -43,6 +43,49 @@ export interface ParkingSpot {
   status: SpotStatus;
 }
 
+export type BookingStatus = "created" | "paid" | "canceled" | "expired" | "used";
+
+export interface Booking {
+  id: number;
+  user_id: number;
+  vehicle_id: number;
+  parking_id: number;
+  spot_id: number;
+  tariff_id: number;
+  planned_start_time: string;
+  planned_end_time: string;
+  status: BookingStatus;
+  created_at: string;
+}
+
+export interface PaymentInfo {
+  id: number;
+  amount: string;
+  status: string;
+  paid_at: string | null;
+}
+
+export interface BookingWithPayments extends Booking {
+  payments: PaymentInfo[];
+}
+
+export interface Vehicle {
+  id: number;
+  user_id: number;
+  plate_number: string;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+}
+
+export interface WorkerSpotBoardItem {
+  spot: ParkingSpot;
+  vehicle: Vehicle | null;
+  booking: BookingWithPayments | null;
+  session: ParkingSession | null;
+  overstay_minutes: number | null;
+}
+
 export interface Tariff {
   id: number;
   parking_id: number;

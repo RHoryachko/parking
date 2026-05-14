@@ -59,11 +59,19 @@ def request_checkout_redirect_url(
             LIQPAY_CHECKOUT_URL,
             data={"data": data_b64, "signature": sig},
             timeout=45,
+            allow_redirects=False,
         )
     except requests.RequestException as exc:
         logger.warning("LiqPay request failed: %s", exc)
         raise RuntimeError("LiqPay network error") from exc
+    if resp.status_code in (301, 302, 303, 307, 308):
+        loc = (resp.headers.get("Location") or "").strip()
+        if not loc:
+            logger.warning("LiqPay redirect %s without Location", resp.status_code)
+            raise RuntimeError("LiqPay checkout redirect without Location header")
+        return loc
     if not resp.ok:
         logger.warning("LiqPay HTTP %s: %s", resp.status_code, resp.text[:500])
         raise RuntimeError(f"LiqPay HTTP {resp.status_code}")
-    return resp.url
+    logger.warning("LiqPay unexpected %s response (no redirect)", resp.status_code)
+    raise RuntimeError(f"LiqPay unexpected HTTP {resp.status_code}")

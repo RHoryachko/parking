@@ -146,20 +146,18 @@ class _BookingScreenState extends State<BookingScreen> {
                       onChanged: (s) => setState(() => selectedSpot = s),
                       decoration: const InputDecoration(labelText: 'Spot'),
                     ),
-                    if (parking?.tariffs != null && parking!.tariffs!.isNotEmpty) ...[
+                    if (selectedTariff != null) ...[
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<TariffModel>(
-                        initialValue: selectedTariff,
-                        items: parking!.tariffs!
-                            .map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Text('${t.pricePerHour} UAH/h (#${t.id})'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (t) => setState(() => selectedTariff = t),
-                        decoration: const InputDecoration(labelText: 'Tariff'),
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Tariff',
+                          filled: true,
+                          fillColor: Color(0xFFF1F5F9),
+                        ),
+                        child: Text(
+                          '${selectedTariff!.pricePerHour} UAH/h (#${selectedTariff!.id})',
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 8),

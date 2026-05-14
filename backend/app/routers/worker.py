@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.deps import get_db, require_role
 from app.models.barrier_log import BarrierLog
@@ -13,18 +13,24 @@ from app.models.parking_session import ParkingSession
 from app.models.parking_spot import ParkingSpot
 from app.models.user import User
 from app.models.vehicle import Vehicle
-from app.schemas.booking import BookingWithPaymentsRead, ManualBookingCreate
+from app.schemas.booking import (
+    BookingRead,
+    BookingWithPaymentsRead,
+    ManualBookingCreate,
+    WorkerBookingCreate,
+)
+from app.schemas.parking import ParkingDetailRead, ParkingRead
 from app.schemas.session import (
     ParkingSessionRead,
     SessionCorrect,
     SessionEntryRequest,
     SessionExitRequest,
 )
-from app.schemas.parking import ParkingRead
 from app.schemas.spot import ParkingSpotRead
 from app.schemas.vehicle import VehicleRead
 from app.schemas.worker import BarrierRequest
-from app.services import booking_service, session_service, worker_service
+from app.schemas.worker_board import WorkerSpotBoardItem
+from app.services import booking_service, session_service, worker_board_service, worker_service
 from app.services.util import normalize_plate
 
 router = APIRouter(dependencies=[Depends(require_role(UserRole.worker))])
@@ -40,6 +46,68 @@ def list_worker_parkings(
         return []
     rows = db.scalars(select(Parking).where(Parking.id.in_(assigned)).order_by(Parking.name)).all()
     return list(rows)
+
+
+@router.get("/parkings/{parking_id}/spot-board", response_model=list[WorkerSpotBoardItem])
+def worker_spot_board(
+    parking_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    worker_service.ensure_worker_parking(db, user.id, parking_id)
+    if not db.get(Parking, parking_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Parking not found")
+    return worker_board_service.list_parking_spot_board(db, parking_id=parking_id)
+
+
+@router.get("/parkings/{parking_id}", response_model=ParkingDetailRead)
+def worker_parking_detail(
+    parking_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    worker_service.ensure_worker_parking(db, user.id, parking_id)
+    p = db.scalars(
+        select(Parking).where(Parking.id == parking_id).options(selectinload(Parking.tariffs))
+    ).first()
+    if not p:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Parking not found")
+    return p
+
+
+@router.post("/bookings", response_model=BookingWithPaymentsRead, status_code=status.HTTP_201_CREATED)
+def worker_create_unpaid_booking(
+    payload: WorkerBookingCreate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    worker_service.ensure_worker_parking(db, user.id, payload.parking_id)
+    b = booking_service.create_booking_for_client(
+        db,
+        client_user_id=payload.user_id,
+        vehicle_id=payload.vehicle_id,
+        parking_id=payload.parking_id,
+        spot_id=payload.spot_id,
+        tariff_id=payload.tariff_id,
+        planned_start_time=payload.planned_start_time,
+        planned_end_time=payload.planned_end_time,
+    )
+    db.commit()
+    stmt = select(Booking).where(Booking.id == b.id).options(joinedload(Booking.payments))
+    out = db.scalars(stmt).first()
+    return out
+
+
+@router.post("/bookings/{booking_id}/pay", response_model=BookingRead)
+def worker_pay_booking(
+    booking_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    b = booking_service.pay_booking_worker_mock(db, worker_id=user.id, booking_id=booking_id)
+    db.commit()
+    db.refresh(b)
+    return b
 
 
 @router.get("/spots", response_model=list[ParkingSpotRead])
@@ -181,6 +249,28 @@ def register_exit_route(
     db.commit()
     db.refresh(s)
     return s
+
+
+@router.post("/exit-by-plate", response_model=ParkingSessionRead)
+def register_exit_by_plate_route(
+    payload: SessionEntryRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_role(UserRole.worker))],
+):
+    """Complete the active session for this parking + plate (worker registers exit at barrier)."""
+    worker_service.ensure_worker_parking(db, user.id, payload.parking_id)
+    s = session_service.find_active_session_by_parking_plate(
+        db, parking_id=payload.parking_id, plate=payload.plate_number
+    )
+    if not s:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No active parking session for this plate at this parking",
+        )
+    out = session_service.register_exit(db, session_id=s.id)
+    db.commit()
+    db.refresh(out)
+    return out
 
 
 @router.post("/barrier", status_code=status.HTTP_201_CREATED)

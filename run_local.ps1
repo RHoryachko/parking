@@ -42,4 +42,5 @@ Write-Host ""
 Write-Host "Opened two windows (API + Vite). SQLite file: backend\parking.db" -ForegroundColor Green
 Write-Host "LiqPay: copy backend\.env.example -> backend\.env and set LIQPAY_PUBLIC_KEY / LIQPAY_PRIVATE_KEY" -ForegroundColor DarkGray
 Write-Host "Default seed accounts after first start: admin@parking.local / admin123" -ForegroundColor Green
-Write-Host "Flutter web (LiqPay return page): cd flutter_client; flutter run -d chrome --web-port=8080 --dart-define=USE_MOCK=false --dart-define=API_BASE_URL=http://127.0.0.1:8010/api" -ForegroundColor DarkGray
+Write-Host "Flutter web (LiqPay return → /payment-success): cd flutter_client; flutter run -d chrome --web-port=8080 --dart-define=USE_MOCK=false --dart-define=API_BASE_URL=http://127.0.0.1:8010/api" -ForegroundColor DarkGray
+Write-Host "LiqPay: APP_PUBLIC_API_URL must be reachable from the internet for the card step (use ngrok for local API)." -ForegroundColor DarkGray

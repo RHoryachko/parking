@@ -49,6 +49,24 @@ class BookingWithPaymentsRead(BookingRead):
     payments: list[PaymentInfoRead] = Field(default_factory=list)
 
 
+class WorkerBookingCreate(BaseModel):
+    """Worker registers a client reservation (unpaid until POST /worker/bookings/{id}/pay)."""
+
+    user_id: int = Field(..., description="Client (vehicle owner) user id")
+    vehicle_id: int
+    parking_id: int
+    spot_id: int
+    tariff_id: int
+    planned_start_time: datetime
+    planned_end_time: datetime
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.planned_end_time <= self.planned_start_time:
+            raise ValueError("planned_end_time must be after planned_start_time")
+        return self
+
+
 class ManualBookingCreate(BaseModel):
     """Worker creates an already-paid reservation (walk-in)."""
 

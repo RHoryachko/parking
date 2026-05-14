@@ -13,7 +13,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   if (!loading && (user?.role === "admin" || user?.role === "worker")) {
-    return <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/worker/dashboard"} replace />;
+    return <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/"} replace />;
   }
 
   async function onSubmit(e: React.FormEvent) {

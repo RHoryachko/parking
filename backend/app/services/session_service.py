@@ -10,11 +10,13 @@ from app.models.booking import Booking
 from app.models.enums import BookingStatus, SessionStatus, SpotStatus
 from app.models.parking_session import ParkingSession
 from app.models.vehicle import Vehicle
-from app.services.util import normalize_plate
+from app.services.util import as_utc, normalize_plate
 
 
 def _billing_hours(entry: datetime, exit_at: datetime) -> int:
-    secs = (exit_at - entry).total_seconds()
+    a = as_utc(entry)
+    b = as_utc(exit_at)
+    secs = (b - a).total_seconds()
     return max(1, math.ceil(secs / 3600))
 
 
@@ -30,22 +32,28 @@ def user_has_active_parking_session(db: Session, user_id: int) -> bool:
 
 
 def find_paid_booking_for_entry(
-    db: Session, *, parking_id: int, plate: str
+    db: Session,
+    *,
+    parking_id: int,
+    plate: str,
+    require_inside_planned_window: bool = True,
 ) -> Booking | None:
-    """Find a paid booking for this parking + plate, within planned window, spot still reserved."""
+    """Find a paid booking for this parking + plate; spot still reserved; optional planned-time window."""
     norm = normalize_plate(plate)
-    now = datetime.now(timezone.utc)
+    conds = [
+        Booking.parking_id == parking_id,
+        Booking.status == BookingStatus.paid,
+        Vehicle.plate_number == norm,
+    ]
+    if require_inside_planned_window:
+        now = datetime.now(timezone.utc)
+        conds.append(Booking.planned_start_time <= now)
+        conds.append(Booking.planned_end_time >= now)
     stmt = (
         select(Booking)
         .join(Vehicle, Vehicle.id == Booking.vehicle_id)
+        .where(*conds)
         .options(joinedload(Booking.spot), joinedload(Booking.tariff), joinedload(Booking.session))
-        .where(
-            Booking.parking_id == parking_id,
-            Booking.status == BookingStatus.paid,
-            Vehicle.plate_number == norm,
-            Booking.planned_start_time <= now,
-            Booking.planned_end_time >= now,
-        )
         .order_by(Booking.created_at.desc())
     )
     for booking in db.scalars(stmt).unique().all():
@@ -56,16 +64,8 @@ def find_paid_booking_for_entry(
     return None
 
 
-def register_entry(db: Session, *, parking_id: int, plate_number: str) -> ParkingSession:
-    """
-    Car enters: paid booking + reserved spot -> create active session, booking used, spot occupied.
-    """
-    booking = find_paid_booking_for_entry(db, parking_id=parking_id, plate=plate_number)
-    if not booking:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "No paid booking with reserved spot for this plate and parking",
-        )
+def _finalize_entry_from_booking(db: Session, booking: Booking) -> ParkingSession:
+    """Create active session from a paid booking (worker / AI gate flow)."""
     if booking.session:
         raise HTTPException(status.HTTP_409_CONFLICT, "Session already exists for this booking")
     if user_has_active_parking_session(db, booking.user_id):
@@ -83,6 +83,53 @@ def register_entry(db: Session, *, parking_id: int, plate_number: str) -> Parkin
     db.add(parking_session)
     db.flush()
     return parking_session
+
+
+def register_entry(
+    db: Session,
+    *,
+    parking_id: int,
+    plate_number: str,
+    require_inside_planned_window: bool = False,
+) -> ParkingSession:
+    """
+    Car enters: paid booking + reserved spot -> create active session, booking used, spot occupied.
+
+    Workers may register entry outside the client's planned window (early/late arrival).
+    Automated flows (AI) should pass require_inside_planned_window=True.
+    """
+    booking = find_paid_booking_for_entry(
+        db,
+        parking_id=parking_id,
+        plate=plate_number,
+        require_inside_planned_window=require_inside_planned_window,
+    )
+    if not booking:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No paid booking with reserved spot for this plate and parking",
+        )
+    return _finalize_entry_from_booking(db, booking)
+
+
+def find_active_session_by_parking_plate(
+    db: Session, *, parking_id: int, plate: str
+) -> ParkingSession | None:
+    """Active session on this parking for vehicle with normalized plate (newest if multiple)."""
+    norm = normalize_plate(plate)
+    stmt = (
+        select(ParkingSession)
+        .join(Booking, Booking.id == ParkingSession.booking_id)
+        .join(Vehicle, Vehicle.id == Booking.vehicle_id)
+        .where(
+            ParkingSession.status == SessionStatus.active,
+            Booking.parking_id == parking_id,
+            Vehicle.plate_number == norm,
+        )
+        .order_by(ParkingSession.entry_time.desc())
+        .limit(1)
+    )
+    return db.scalars(stmt).first()
 
 
 def register_exit(db: Session, *, session_id: int) -> ParkingSession:

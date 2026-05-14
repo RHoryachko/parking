@@ -7,6 +7,7 @@ import 'app.dart';
 String _initialLocation() {
   if (!kIsWeb) return '/';
   final path = Uri.base.path;
+  // LiqPay default return: /payment-success?booking_id=… (see backend liqpay_result_url).
   if (path == '/payment-success' || path.endsWith('/payment-success')) {
     return '/payment-success';
   }
